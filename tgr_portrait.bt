@@ -1,0 +1,138 @@
+//------------------------------------------------
+//--- 010 Editor v14.0 Binary Template
+//
+//      File: 
+//   Authors: 
+//   Version: 
+//   Purpose: 
+//  Category: 
+// File Mask: 
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+LittleEndian();
+BitfieldDisablePadding();
+
+typedef struct {
+    uint16 ulx;  // 0 for portrait
+    uint16 uly;  // 0 for portrait
+    uint16 lrx;  // 73 for portrait
+    uint16 lry;  // 79 for portrait
+    uint32 offset;  // 88 for portrait
+} FRAME_SIZE;
+   
+typedef struct {
+    LittleEndian();
+    int blue : 5;
+    int green : 6;
+    int red : 5;
+} PIXEL <optimize=false>;
+
+typedef struct {
+    BigEndian();
+    int run_type : 3;
+    int run_length : 5;
+    
+    if (run_type == 1) {
+        PIXEL pixel;
+    } else if (run_type == 2) {
+        PIXEL pixels[run_length];
+    }
+} RUN;
+
+typedef struct {
+    // line_length is used as a duplicate array to grab 2 bytes 
+    // if the line starts 8X, and to just grab one otherwise
+    local int ct_header_bytes = 3;
+    
+    ubyte line_length;
+    local int total_line_length = line_length;
+    if ((line_length >> 7) == 1) {  
+        ubyte line_length; // length of line in bytes, including header
+        total_line_length = ((line_length[0] & 0b01111111) << 8) | line_length[1];  // combines both bytes and strips the flag bit
+        ct_header_bytes += 1;
+    }
+    
+    ubyte offset;
+    local int total_offset = offset;
+    if ((offset >> 7) == 1) {  
+        ubyte offset; // offset to start of line data, if there are transparent/padding pixels
+        total_offset = ((offset[0] & 0b01111111) << 8) | offset[1];  // combines both bytes and strips the flag bit
+        ct_header_bytes += 1;
+    }
+    
+    ubyte ct_pixels;
+    local int total_ct_pixels = ct_pixels;
+    if ((ct_pixels >> 7) == 1) {  
+        ubyte ct_pixels; // number of pixels in line
+        total_ct_pixels = ((ct_pixels[0] & 0b01111111) << 8) | ct_pixels[1];  // combines both bytes and strips the flag bit
+        ct_header_bytes += 1;
+    }
+    
+    local int bytes_used = ct_header_bytes;
+    while (bytes_used < total_line_length) {
+        RUN run;
+        bytes_used += sizeof(run);
+    }
+    
+    //ubyte line_data[total_line_length - ct_header_bytes]; // (-ct_header_bytes) to account for size of header
+} LINE <optimize=false>;
+
+typedef struct {
+    char chunk_name[4];
+    BigEndian();
+    uint32 chunk_length; //distance from end of chunk_length to next FRAM
+    LittleEndian();
+    local int bytes_used = 0;
+    while (bytes_used < chunk_length) {
+        LINE line;
+        bytes_used += sizeof(line);
+    }
+} FRAM <optimize=false>;
+    
+
+struct FORM {
+    char chunk_name[4];  // Always FORM
+    BigEndian();
+    int32 length;  //length in bytes from start of HEDR to end of file
+    LittleEndian();
+    char file_type[4];  // Always TGAR
+} form;
+
+struct HEDR {
+    char chunk_name[4];
+    BigEndian();
+    uint32 chunk_length; // number of bytes between the end of chunk_length and the beginning of the first FRAM
+    LittleEndian();
+    uint32 version;
+    uint16 frame_count;
+    ubyte bit_depth;
+    ubyte unknown0;
+    uint16 index_mode; // 0x0002 for portraits
+    uint16 offset_flag;  // 0x0000 for portraits
+    
+    struct SIZE {
+        uint16 x;
+        uint16 y;
+    } size;
+    
+    struct HOTSPOT {
+        uint16 x;
+        uint16 y;
+    } hotspot;
+    
+    byte unknown1[20]; // seems to contain max frame size
+    // This is 0x 0000 0000 4900 4F00 4A00 5000 0000 0000 0000 0000 for portraits
+    
+    
+    FRAME_SIZE frame_sizes[frame_count];
+    
+} hedr;
+
+// For portraits, this space contains:
+// 0x 0100 0000 0100 0100
+
+// Moves to beginning of first FRAM
+FSeek(hedr.frame_sizes[0].offset-8);
+
+FRAM frames[hedr.frame_count] <optimize=false>;
