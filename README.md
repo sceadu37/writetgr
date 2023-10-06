@@ -3,7 +3,9 @@ Simple script for packing png/jpg files into TGR portrait files for Kohan: Ahrim
 
 Requires PIL to be installed
 
-run with:```python writetgr name_of_input_file```
+run with:```python writetgr name_of_input_file [artist_name]```
+
+If present, artist name will be written to file metadata, along with program version and a link to this repo.
 
 If the input image matches the size of a small portrait (74 X 80) or a large portrait (230 X 230), the matching portrait frame will be applied automatically to the output.
 If the input image does not match these dimensions, it will still be converted but no border will be added and an error will be printed
