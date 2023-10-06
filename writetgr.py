@@ -14,8 +14,12 @@ def parseInputImage(im):
     
     if imW == 74 and imH == 80:
         print(f"Image size {imW} by {imH} matches for Small Portrait")
+        ft = "S"
+        frame = Image.open("small-portrait-frame.png")
     elif imW == 230 and imH == 230:
         print(f"Image size {imW} by {imH} matches for Large Portrait")
+        ft = "L"
+        frame = Image.open("large-portrait-frame.png")
     else:
         print(f"Image size {imW} by {imH} does not match a Portrait size\nGenerated TGR may not load correctly")
     
@@ -23,7 +27,15 @@ def parseInputImage(im):
     for y in range(0,imH):
         for x in range(0, imW):
             p = im.getpixel((x, y))
-            r, g, b = cf.rgb888_to_rgb565(p[0], p[1], p[2])
+            if ft:  # If frame loaded, apply the non-white pixels to the input image
+                fp = frame.getpixel((x,y))
+                if not(fp[0] == 255 and fp[1] == 255 and  fp[2] == 255):
+                    #print(fp)
+                    r, g, b = cf.rgb888_to_rgb565(fp[0], fp[1], fp[2])
+                else:
+                    r, g, b = cf.rgb888_to_rgb565(p[0], p[1], p[2])
+            else:
+                r, g, b = cf.rgb888_to_rgb565(p[0], p[1], p[2])
             tgr_pixel = cf.rgb565_to_bytes(r, g, b)
             pb.append(tgr_pixel)
     return pb
