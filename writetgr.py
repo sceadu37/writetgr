@@ -9,6 +9,8 @@ from PIL import Image
 from pathlib import Path
 import sys
 
+VERSION = '0.1.0'
+
 def parseInputImage(im):
     imW, imH = im.size
     
@@ -84,8 +86,8 @@ def encodeFRAMHeader(im, lines):
     
     return header
 
-def encodeFooter(artist):
-    return ("Artist: " + artist).encode('utf-8')
+def encodeFooter(artist,version):
+    return (f"Artist: {artist}. Created with writetgr version {version}. https://github.com/sceadu37/writetgr").encode('utf-8')
 
 def encodeHEDR(im):
     imW, imH = im.size
@@ -125,18 +127,18 @@ def encodeHEDR(im):
     
     return (chunk_type + chunk_length + s1 + frame_offset + padding)
 
-def encodeForm(hedr,fram_header,lines):
+def encodeForm(hedr,fram_header,lines,footer):
     chunk_name = "464F524D"
     file_size = "00000000"
     file_type = "54474152"
     file_size_int = len(hedr + fram_header)
     for line in lines:
         file_size_int += len(line)
-    file_size_int = file_size_int>>1
+    file_size_int = (file_size_int>>1) + len(footer)    # footer is already a bytearray, so no need to bitshift len
     file_size = f"{file_size_int:0{8}X}"
     return chunk_name + file_size + file_type
 
-def writeTGR(im, form, hedr, fram_header, lines, outfile):
+def writeTGR(im, form, hedr, fram_header, lines, footer, outfile):
     print(f"Writing to {outfile}")
     imW, imH = im.size
     with open(outfile, "wb") as out_fh:
@@ -146,6 +148,8 @@ def writeTGR(im, form, hedr, fram_header, lines, outfile):
         
         for i in range(0,imH):   # For every row...
             out_fh.write(bytes.fromhex(lines[i]))
+        
+        out_fh.write(footer)    # Already bytes
     
     return
     
@@ -154,6 +158,9 @@ if __name__ == "__main__":
         print("Provide a file to convert to TGR")
         sys.exit()
     infile = sys.argv[1]
+    if len(sys.argv) >= 3:
+        artist = sys.argv[2]
+        
     image_name = Path(infile).stem
     outfile = image_name+'.tgr'
 
@@ -166,10 +173,12 @@ if __name__ == "__main__":
     fram_header = encodeFRAMHeader(im, lines)
 
     hedr = encodeHEDR(im)
+    
+    footer = encodeFooter(artist, VERSION)
 
-    form = encodeForm(hedr, fram_header, lines)
+    form = encodeForm(hedr, fram_header, lines, footer)
 
-    writeTGR(im, form, hedr, fram_header, lines, outfile)
+    writeTGR(im, form, hedr, fram_header, lines, footer, outfile)
 
     
     
