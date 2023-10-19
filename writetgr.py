@@ -9,41 +9,130 @@ from PIL import Image
 from pathlib import Path
 import sys
 
-VERSION = '0.1.0'
+VERSION = '0.1.2'
+DEBUG = True
+
+def rescaleInputImage(im,out_size):
+    inW, inH = im.size
+    if out_size == "small":     # rescale to 66 X 72 (internal size of portrait frame)
+        outW, outH = 66, 72        
+    elif out_size == "large":   # rescale to 230 X 230 (full size of large frame)
+        outW, outH = 230, 230
+    else:
+        print(f'{out_size} is not a valid size')
+        sys.exit()
+    
+    if inH < (inW * outH / outW):   # if height less than width * inverse scaling factor
+        crW = int(inH*outW/outH)    # set width equal to height, then scale to maintain AR
+        crop = int((inW - crW) / 2)
+        box = (crop ,0 ,inW - crop , inH)
+        if DEBUG:
+            print(f'Cropping width from {inW} to {crW} using bounding box {box}')
+    else:
+        crH = int(inW*outH/outW)
+        crop = int((inH - crH) / 2)
+        box = (0 ,crop ,inW, inH - crop)
+        if DEBUG:
+            print(f'Cropping height from {inH} to {crH} using bounding box {box}')
+        
+    cropped_im = im.crop(box)
+    
+    #cropped_im.save('crop.png')
+       
+    cropped_im.thumbnail((outW, outH))
+    
+    cropped_im.save('rescale.png')
+    
+    return cropped_im
+
+def embossEdge(im):
+    imW, imH = im.size
+    for y in range(0,imH):
+        for x in range(0, imW):
+            if x in (0, imW-1) or y in (0, imH-1):
+                r, g, b = im.getpixel((x, y))[:3]
+                h, s, v = cf.rgb888_to_hsv(r, g, b)
+                s = (s - 0.05 if s > 0.05 else 0)
+                r, g, b = cf.hsv_to_rgb888(h, s, v)
+                im.putpixel((x, y), (r, g, b))
+    im.save('emboss.png')
+    return im
+    
+
 
 def parseInputImage(im):
     imW, imH = im.size
+    oW, oH = imW, imH
     
     if imW == 74 and imH == 80:
-        print(f"Image size {imW} by {imH} matches for Small Portrait")
-        ft = "S"
+        print(f"Image size {imW} by {imH} matches for Small Portrait, border-overwrite")
+        frame_size = "S"
+        mode = "overwrite"
+        frame = Image.open("small-portrait-frame.png")
+    if imW == 66 and imH == 72:
+        print(f"Image size {imW} by {imH} matches for Small Portrait, border-append")
+        frame_size = "S"
+        mode = "append"
         frame = Image.open("small-portrait-frame.png")
     elif imW == 230 and imH == 230:
-        print(f"Image size {imW} by {imH} matches for Large Portrait")
-        ft = "L"
+        print(f"Image size {imW} by {imH} matches for Large Portrait, border-overwrite")
+        frame_size = "L"
+        mode = "overwrite"
         frame = Image.open("large-portrait-frame.png")
     else:
         print(f"Image size {imW} by {imH} does not match a Portrait size\nGenerated TGR may not load correctly")
+        frame_size = None
+        mode = None
+    
     
     pb = []
-    for y in range(0,imH):
-        for x in range(0, imW):
-            p = im.getpixel((x, y))
-            if ft:  # If frame loaded, apply the non-white pixels to the input image
+    if frame_size == "S" and mode == "append":
+        fW, fH = frame.size
+        if fW > imW or fH > imH:
+            oW, oH = fW, fH
+            
+        if DEBUG:
+            print(f'Border template: {fW} X {fH}')
+            
+        x_offset = int((fW - imW) / 2)
+        y_offset = int((fH - imH) / 2)
+        
+        for y in range(0,fH):
+            for x in range(0, fW):
                 fp = frame.getpixel((x,y))
-                if not(fp[0] == 255 and fp[1] == 255 and  fp[2] == 255):
-                    #print(fp)
+                if not(fp[0:3] == (255, 255, 255)):     # if pixel isn't white
                     r, g, b = cf.rgb888_to_rgb565(fp[0], fp[1], fp[2])
+                    
+                elif (x - x_offset >= 0) and (y - y_offset >= 0):     # if in bounds of image
+                    p = im.getpixel((x - x_offset, y - y_offset))
+                    r, g, b = cf.rgb888_to_rgb565(p[0], p[1], p[2])
+                else:
+                    r, g, b = cf.rgb888_to_rgb565(255, 0, 0)      # red pixel to fill gaps
+                    
+                tgr_pixel = cf.rgb565_to_bytes(r, g, b)
+                pb.append(tgr_pixel)
+    
+    else:
+        if DEBUG:
+            print('Normal overwrite mode')
+        for y in range(0,imH):
+            for x in range(0, imW):
+                p = im.getpixel((x, y))
+                if frame_size:  # If frame loaded, apply the non-white pixels to the input image
+                    fp = frame.getpixel((x,y))
+                    if not(fp[0] == 255 and fp[1] == 255 and  fp[2] == 255):
+                        #print(fp)
+                        r, g, b = cf.rgb888_to_rgb565(fp[0], fp[1], fp[2])
+                    else:
+                        r, g, b = cf.rgb888_to_rgb565(p[0], p[1], p[2])
                 else:
                     r, g, b = cf.rgb888_to_rgb565(p[0], p[1], p[2])
-            else:
-                r, g, b = cf.rgb888_to_rgb565(p[0], p[1], p[2])
-            tgr_pixel = cf.rgb565_to_bytes(r, g, b)
-            pb.append(tgr_pixel)
-    return pb
+                tgr_pixel = cf.rgb565_to_bytes(r, g, b)
+                pb.append(tgr_pixel)
+    return pb, (oW, oH)
 
-def encodeLines(im,pb):
-    imW, imH = im.size
+def encodeLines(pb, size):
+    imW, imH = size
     lines = []
     for y in range(0,imH):
         line_data = ""
@@ -76,8 +165,8 @@ def encodeLines(im,pb):
     
     return lines
 
-def encodeFRAMHeader(im, lines):
-    imW, imH = im.size
+def encodeFRAMHeader(lines, size):
+    imW, imH = size
     
     chunk_length = 0
     for line in lines:
@@ -89,8 +178,8 @@ def encodeFRAMHeader(im, lines):
 def encodeFooter(artist,version):
     return (f"Artist: {artist}. Created with writetgr version {version}. https://github.com/sceadu37/writetgr").encode('utf-8')
 
-def encodeHEDR(im):
-    imW, imH = im.size
+def encodeHEDR(size):
+    imW, imH = size
     chunk_type = "48454452"
     chunk_length = "00000000"
     version = "00000000"
@@ -138,9 +227,9 @@ def encodeForm(hedr,fram_header,lines,footer):
     file_size = f"{file_size_int:0{8}X}"
     return chunk_name + file_size + file_type
 
-def writeTGR(im, form, hedr, fram_header, lines, footer, outfile):
+def writeTGR(size, form, hedr, fram_header, lines, footer, outfile):
     print(f"Writing to {outfile}")
-    imW, imH = im.size
+    imW, imH = size
     with open(outfile, "wb") as out_fh:
         out_fh.write(bytes.fromhex(form))
         out_fh.write(bytes.fromhex(hedr))
@@ -154,31 +243,40 @@ def writeTGR(im, form, hedr, fram_header, lines, footer, outfile):
     return
     
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Provide a file to convert to TGR")
+    if len(sys.argv) != 4:
+        print('Usage: writetgr filename [size: small, large] artist')
         sys.exit()
     infile = sys.argv[1]
-    if len(sys.argv) >= 3:
-        artist = sys.argv[2]
+    
+    out_size = sys.argv[2]
+    if out_size not in ('small', 'large'):
+        print(f'{out_size} is not a valid size.\nUse "small" for unit portraits and "large" for campaign portraits')
+    
+    artist = sys.argv[3]
         
     image_name = Path(infile).stem
     outfile = image_name+'.tgr'
 
     im = Image.open(infile)
     
-    pb = parseInputImage(im)
+    im = rescaleInputImage(im,out_size)
+    
+    if out_size == 'small':
+        im = embossEdge(im)
+    
+    pb, size = parseInputImage(im)
 
-    lines = encodeLines(im, pb)
+    lines = encodeLines(pb, size)
 
-    fram_header = encodeFRAMHeader(im, lines)
+    fram_header = encodeFRAMHeader(lines, size)
 
-    hedr = encodeHEDR(im)
+    hedr = encodeHEDR(size)
     
     footer = encodeFooter(artist, VERSION)
 
     form = encodeForm(hedr, fram_header, lines, footer)
 
-    writeTGR(im, form, hedr, fram_header, lines, footer, outfile)
+    writeTGR(size, form, hedr, fram_header, lines, footer, outfile)
 
     
     
