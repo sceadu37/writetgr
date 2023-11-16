@@ -30,7 +30,7 @@ typedef struct {
     int blue : 5;
     int green : 6;
     int red : 5;
-} IMM_PIXEL <optimize=false>;
+} IMM_PIXEL <optimize=false,bgcolor=PixelColor,comment=ColorComment>;
 
 // Represents an 'indexed color' pixel (8 bits representing palette index)   
 typedef struct {
@@ -41,9 +41,24 @@ typedef struct {
 // Perform (pixelN << 1) | 1 to calculate the actual index value
 typedef struct {
     LittleEndian();
-    int pixel1 : 4;
     int pixel2 : 4;
-} PLYR_PIXEL <optimize=false>;
+    int pixel1 : 4;
+} PLYR_PIXEL <optimize=false,bgcolor=0x0000FF>;
+
+int64 PixelColor( IMM_PIXEL &p ) {
+    local uint64 r8 = (double)p.red / 31.0 * 255.0;
+    local uint64 g8 = (double)p.green / 63.0 * 255.0;
+    local uint64 b8 = (double)p.blue / 31.0 * 255.0;
+    return (b8 << 16 | g8 << 8 | r8);
+    //return 0xFFFFFF;
+}
+
+string ColorComment ( IMM_PIXEL &p ) {
+    local uint64 r8 = (double)p.red / 31.0 * 255.0;
+    local uint64 g8 = (double)p.green / 63.0 * 255.0;
+    local uint64 b8 = (double)p.blue / 31.0 * 255.0;
+    return Str("r:%d g:%d b:%d", r8, g8, b8);
+}
 
 typedef struct {
     BigEndian();
@@ -62,6 +77,15 @@ typedef struct {
                 IMM_PIXEL pixel;
             }
             break;
+        case 0b100:     // Sets the brightness of a single translucent pixel
+            int run_type : 3;
+            int alpha : 5;
+            if (hedr.bit_depth == 8) {
+                IND_PIXEL ind_pixel;
+            } else {
+                IMM_PIXEL pixel;
+            }
+            break;
         case 0b010:     // Unencoded run of pixels
             int run_type : 3;
             int run_length : 5;
@@ -71,10 +95,16 @@ typedef struct {
                 IMM_PIXEL pixels[run_length];
             }
             break;
-        /*case 0b100:     // need to figure out what this is
+        case 0b011:     // Run length encoded run of translucent/glowing colored pixels
             int run_type : 3;
-            int player_color : 5;
-            break;*/
+            int run_length : 5;
+            ubyte alpha;
+            if (hedr.bit_depth == 8) {
+                IND_PIXEL ind_pixel;
+            } else {
+                IMM_PIXEL pixel;
+            }
+            break;
         case 0b110:     // One Player Color pixel
             int run_type : 3;
             int player_color : 5;
