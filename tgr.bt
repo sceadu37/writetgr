@@ -54,9 +54,24 @@ int64 PixelColor( IMM_PIXEL &p ) {
 }
 
 string ColorComment ( IMM_PIXEL &p ) {
-    local uint64 r8 = (double)p.red / 31.0 * 255.0;
-    local uint64 g8 = (double)p.green / 63.0 * 255.0;
-    local uint64 b8 = (double)p.blue / 31.0 * 255.0;
+    local double r8 = (double)p.red / 31.0 * 255.0;
+    if ( r8 > (Floor(r8) + 0.5) ) {
+        r8 = Ceil(r8);
+    } else {
+        r8 = Floor(r8);
+    }
+    local double g8 = (double)p.green / 63.0 * 255.0;
+    if ( g8 > (Floor(g8) + 0.5) ) {
+        g8 = Ceil(g8);
+    } else {
+        g8 = Floor(g8);
+    }
+    local double b8 = (double)p.blue / 31.0 * 255.0;
+    if ( b8 > (Floor(b8) + 0.5) ) {
+        b8 = Ceil(b8);
+    } else {
+        b8 = Floor(b8);
+    }
     return Str("r:%d g:%d b:%d", r8, g8, b8);
 }
 
@@ -71,15 +86,6 @@ typedef struct {
         case 0b001:     // Run length encoded run of pixels
             int run_type : 3;
             int run_length : 5;
-            if (hedr.bit_depth == 8) {
-                IND_PIXEL ind_pixel;
-            } else {
-                IMM_PIXEL pixel;
-            }
-            break;
-        case 0b100:     // Sets the brightness of a single translucent pixel
-            int run_type : 3;
-            int alpha : 5;
             if (hedr.bit_depth == 8) {
                 IND_PIXEL ind_pixel;
             } else {
@@ -104,6 +110,19 @@ typedef struct {
             } else {
                 IMM_PIXEL pixel;
             }
+            break;
+        case 0b100:     // Sets the brightness of a single translucent pixel
+            int run_type : 3;
+            int alpha : 5;
+            if (hedr.bit_depth == 8) {
+                IND_PIXEL ind_pixel;
+            } else {
+                IMM_PIXEL pixel;
+            }
+            break;
+        case 0b101:     // Shadow pixels in sprites
+            int run_type : 3;
+            int ct_shadow_pixels : 5;
             break;
         case 0b110:     // One Player Color pixel
             int run_type : 3;
