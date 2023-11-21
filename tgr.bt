@@ -24,6 +24,12 @@ typedef struct {
     uint32 offset;
 } FRAME_SIZE;
 
+typedef struct {
+    uint16 start_frame;
+    uint16 frame_count;
+    uint16 frame_rate;      // in 1/100s
+} ANIMATION;
+
 // Represents an 'immediate color' pixel (16 bits representing color)
 typedef struct {
     LittleEndian();
@@ -252,9 +258,16 @@ struct HEDR {
     
     FRAME_SIZE frame_sizes[frame_count];
     
+    uint16 anim_count;
+    ANIMATION anim[anim_count];
+    
+    if (anim_count % 2 == 0) {
+        ubyte padding[2];
+    }
+    
 } hedr;
 
-byte unknown2[(hedr.chunk_length + 8) - sizeof(hedr)];
+//byte unknown2[(hedr.chunk_length + 8) - sizeof(hedr)];
 
 if (hedr.bit_depth == 8) {
     PALT palt;
